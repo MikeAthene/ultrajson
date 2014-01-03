@@ -716,13 +716,9 @@ ISITERABLE:
   PyErr_Clear();
 
   PRINTMARK();
-  tc->type = JT_OBJECT;
-  pc->iterBegin = Dir_iterBegin;
-  pc->iterEnd = Dir_iterEnd;
-  pc->iterNext = Dir_iterNext;
-  pc->iterGetValue = Dir_iterGetValue;
-  pc->iterGetName = Dir_iterGetName;
-  return;
+  // Falling to INVALID case as this type of object(class instance, module,
+  // class, function, etc..) can't be serialized.
+  PyErr_Format (PyExc_TypeError, "%s", "Object is not JSON serializable");
 
 INVALID:
   tc->type = JT_INVALID;
