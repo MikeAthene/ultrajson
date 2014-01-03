@@ -75,12 +75,6 @@ static JSOBJ SetError( struct DecoderState *ds, int offset, const char *message)
   return NULL;
 }
 
-static void ClearError( struct DecoderState *ds)
-{
-  ds->dec->errorOffset = 0;
-  ds->dec->errorStr = NULL;
-}
-
 double createDouble(double intNeg, double intValue, double frcValue, int frcDecimalCount)
 {
   static const double g_pow10[] = {1.0, 0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001,0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001, 0.0000000000001, 0.00000000000001, 0.000000000000001};
@@ -885,12 +879,18 @@ JSOBJ JSON_DecodeObject(JSONObjectDecoder *dec, const char *buffer, size_t cbBuf
     dec->free(ds.escStart);
   }
 
-  SkipWhitespace(&ds);
-
-  if (ds.start != ds.end && ret)
+  if (!(dec->errorStr))
   {
-    dec->releaseObject(ds.prv, ret);
-    return SetError(&ds, -1, "Trailing data");
+    if ((ds.end - ds.start) > 0)
+    {
+      SkipWhitespace(&ds);
+    }
+
+    if (ds.start != ds.end && ret)
+    {
+      dec->releaseObject(ds.prv, ret);
+      return SetError(&ds, -1, "Trailing data");
+    }
   }
 
   return ret;
