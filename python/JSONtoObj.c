@@ -97,6 +97,35 @@ JSOBJ Object_newLong(void *prv, JSINT64 value)
   return PyLong_FromLongLong (value);
 }
 
+#define BUF_SIZE 64
+JSOBJ Object_newBigInt(void *prv, char *start, char *end)
+{
+  char smallBuffer[BUF_SIZE];
+  char *buffer = NULL;
+  PyObject* result;
+  size_t len = end - start;
+
+  if (len < BUF_SIZE) {
+    // For strings of sane size, do the faster convertion from string buffer.
+    strncpy(smallBuffer, start, len);
+    smallBuffer[len] = '\0';
+    result = PyLong_FromString(smallBuffer, NULL, 0);
+  } else {
+    // For strings of arbitrary length do the alloc.
+    buffer = malloc(len + 1);
+    if (buffer == NULL) {
+      PyErr_Format(PyExc_TypeError, "Couldn't allocate memory to parse string");
+      return NULL;
+    }
+    strncpy(buffer, start, len);
+    buffer[len] = '\0';
+    result = PyLong_FromString(buffer, NULL, 0);
+    free(buffer);
+  }
+
+  return result;
+}
+
 JSOBJ Object_newDouble(void *prv, double value)
 {
   return PyFloat_FromDouble(value);
@@ -127,6 +156,7 @@ PyObject* JSONToObj(PyObject* self, PyObject *args, PyObject *kwargs)
     Object_newArray,
     Object_newInteger,
     Object_newLong,
+    Object_newBigInt,
     Object_newDouble,
     Object_releaseObject,
     PyObject_Malloc,

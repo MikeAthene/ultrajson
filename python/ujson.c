@@ -106,6 +106,12 @@ PYMODINITFUNC
   version_string = PyString_FromString (UJSON_VERSION);
   PyModule_AddObject (module, "__version__", version_string);
 
+#ifdef JSON_HANDLE_BIGINTS
+  PyModule_AddObject (module, "bigint_supported", Py_True);
+#else
+  PyModule_AddObject (module, "bigint_supported", Py_False);
+#endif
+
 #if PY_MAJOR_VERSION >= 3
   return module;
 #endif

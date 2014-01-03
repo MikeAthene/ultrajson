@@ -77,7 +77,7 @@ static JSOBJ SetError( struct DecoderState *ds, int offset, const char *message)
 
 double createDouble(double intNeg, double intValue, double frcValue, int frcDecimalCount)
 {
-  static const double g_pow10[] = {1.0, 0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001,0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001, 0.0000000000001, 0.00000000000001, 0.000000000000001};
+  static const double g_pow10[] = {1.0, 0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001, 0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001, 0.0000000000001, 0.00000000000001, 0.000000000000001};
   return (intValue + (frcValue * g_pow10[frcDecimalCount])) * intNeg;
 }
 
@@ -109,14 +109,21 @@ FASTCALL_ATTR JSOBJ FASTCALL_MSVC decode_numeric (struct DecoderState *ds)
   double expNeg;
   double expValue;
   char *offset = ds->start;
-
+#if HAS_JSON_HANDLE_BIGINTS
+  JSUINT64 divTenOverflowLimit = LLONG_MAX / 10;
+  JSUINT64 modTenOverflowLimit = LLONG_MAX % 10;
+  int intOverflow = 0;
+#else
   JSUINT64 overflowLimit = LLONG_MAX;
+#endif
 
   if (*(offset) == '-')
   {
     offset ++;
     intNeg = -1;
+#if !HAS_JSON_HANDLE_BIGINTS
     overflowLimit = LLONG_MIN;
+#endif
   }
 
   // Scan integer part
@@ -139,15 +146,29 @@ FASTCALL_ATTR JSOBJ FASTCALL_MSVC decode_numeric (struct DecoderState *ds)
       case '8':
       case '9':
       {
-        //FIXME: Check for arithemtic overflow here
         //PERF: Don't do 64-bit arithmetic here unless we know we have to
+#if HAS_JSON_HANDLE_BIGINTS
+        if (!intOverflow) {
+          // No need for a full overflow check, use the fact that we assemble
+          // the value by multiplying by 10 every time a new number is parsed.
+          if (intValue > divTenOverflowLimit ||
+                 (intValue == divTenOverflowLimit &&
+                   (JSLONG) (chr - 48) > modTenOverflowLimit)) {
+            // We can't do fast conversion, use python to convert the number.
+            // Set the flag so we can convert in BREAK_INT_LOOP
+            intOverflow = 1;
+            intValue = 0;
+          } else {
+            intValue = intValue * 10ULL + (JSLONG) (chr - 48);
+          }
+        }
+#else
         intValue = intValue * 10ULL + (JSLONG) (chr - 48);
-
         if (intValue > overflowLimit)
         {
           return SetError(ds, -1, overflowLimit == LLONG_MAX ? "Value is too big" : "Value is too small");
         }
-
+#endif
         offset ++;
         mantSize ++;
         break;
@@ -175,7 +196,14 @@ FASTCALL_ATTR JSOBJ FASTCALL_MSVC decode_numeric (struct DecoderState *ds)
   }
 
 BREAK_INT_LOOP:
-
+#if HAS_JSON_HANDLE_BIGINTS
+  if (intOverflow) {
+    ds->lastType = JT_BIGINT;
+    char *start = ds->start;
+    ds->start = offset;
+    return ds->dec->newBigInt(ds->prv, start, offset);
+  }
+#endif
   ds->lastType = JT_INT;
   ds->start = offset;
 
@@ -189,8 +217,12 @@ BREAK_INT_LOOP:
   }
 
 DECODE_FRACTION:
-
+#if HAS_JSON_HANDLE_BIGINTS
+  // If we detected an overflow, we are forced to switch to slower parsing.
+  if (ds->dec->preciseFloat || intOverflow)
+#else
   if (ds->dec->preciseFloat)
+#endif
   {
     return decodePreciseFloat(ds);
   }
@@ -243,7 +275,12 @@ BREAK_FRC_LOOP:
   return ds->dec->newDouble (ds->prv, createDouble( (double) intNeg, (double) intValue, frcValue, decimalCount));
 
 DECODE_EXPONENT:
+#if HAS_JSON_HANDLE_BIGINTS
+  // If we detected an overflow, we are forced to switch to slower parsing.
+  if (ds->dec->preciseFloat || intOverflow)
+#else
   if (ds->dec->preciseFloat)
+#endif
   {
     return decodePreciseFloat(ds);
   }

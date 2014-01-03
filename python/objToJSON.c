@@ -118,6 +118,13 @@ static void *PyLongToINT64(JSOBJ _obj, JSONTypeContext *tc, void *outValue, size
   return NULL;
 }
 
+static void *PyBigIntToSTR(JSOBJ _obj, JSONTypeContext *tc, void *outValue, size_t *_outLen)
+{
+  PyObject *obj = PyObject_Str((PyObject *) _obj);
+  *_outLen = PyString_GET_SIZE(obj);
+  return PyString_AS_STRING(obj);
+}
+
 static void *PyFloatToDOUBLE(JSOBJ _obj, JSONTypeContext *tc, void *outValue, size_t *_outLen)
 {
   PyObject *obj = (PyObject *) _obj;
@@ -568,6 +575,13 @@ void Object_beginTypeContext (JSOBJ _obj, JSONTypeContext *tc)
 
     if (exc && PyErr_ExceptionMatches(PyExc_OverflowError))
     {
+#if HAS_JSON_HANDLE_BIGINTS
+      PyErr_Clear();
+      pc->PyTypeToJSON = PyBigIntToSTR;
+      tc->type = JT_BIGINT;
+      GET_TC(tc)->longValue = 0;
+      return;
+#endif
       PRINTMARK();
       goto INVALID;
     }
@@ -823,7 +837,11 @@ PyObject* objToJSON(PyObject* self, PyObject *args, PyObject *kwargs)
     -1, //recursionMax
     idoublePrecision,
     1, //forceAscii
+#if HAS_JSON_ENCODE_HTML_CHARS_DEFAULT_TRUE
+    1, //encodeHTMLChars
+#else
     0, //encodeHTMLChars
+#endif
   };
 
 

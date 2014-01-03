@@ -155,13 +155,16 @@ FASTCALL_ATTR INLINE_PREFIX void FASTCALL_MSVC Buffer_AppendShortHexUnchecked (c
   *(outputOffset++) = g_hexChars[(value & 0x000f) >> 0];
 }
 
-int Buffer_EscapeStringUnvalidated (JSONObjectEncoder *enc, const char *io, const char *end)
+int Buffer_EscapeStringUnvalidated (JSOBJ obj, JSONObjectEncoder *enc, const char *io, const char *end)
 {
+#if HAS_JSON_ESCAPE_UNICODE_CONTROL_CHARACTERS
+  JSUTF32 ucs;
+#endif
   char *of = (char *) enc->offset;
 
   for (;;)
   {
-    switch (*io)
+  switch (*io)
     {
       case 0x00:
       {
@@ -231,6 +234,9 @@ int Buffer_EscapeStringUnvalidated (JSONObjectEncoder *enc, const char *io, cons
       case 0x1d:
       case 0x1e:
       case 0x1f:
+#if HAS_JSON_ESCAPE_UNICODE_CONTROL_CHARACTERS
+      case 0x7f:
+#endif
       {
         *(of++) = '\\';
         *(of++) = 'u';
@@ -240,6 +246,31 @@ int Buffer_EscapeStringUnvalidated (JSONObjectEncoder *enc, const char *io, cons
         *(of++) = g_hexChars[ (unsigned char) ((*io) & 0x0f)];
         break;
       }
+#if HAS_JSON_ESCAPE_UNICODE_CONTROL_CHARACTERS
+      // The range 0x80 to 0x9F ('0b10000000' to '0b10011111')
+      // would be encoded as 11000010 10000000 to 1100010 10011111
+      // (UTF-8 two byte sequence masks are 110XXXXX and 10XXXXXX)
+      // We use the fact that first byte would always be 11000010
+      case 0xc2:
+      {
+          if (end - io < 1)
+          {
+            enc->offset += (of - enc->offset);
+            SetError (obj, enc, "Unexpected end of data: Truncated UTF-8 sequence when encoding string");
+            return FALSE;
+          }
+          ucs = 0x80 + (*(io + 1) & 0x3f);
+          if (ucs >= 0x80 && ucs <= 0x9F)
+          {
+            *(of++) = '\\';
+            *(of++) = 'u';
+            Buffer_AppendShortHexUnchecked(of, (unsigned short) ucs);
+            of += 4;
+            io += 2;
+            continue;
+         }
+      }
+#endif
       default: (*of++) = (*io); break;
       }
     io++;
@@ -577,9 +608,9 @@ int Buffer_AppendDoubleUnchecked(JSOBJ obj, JSONObjectEncoder *enc, double value
   */
   if (value > thres_max)
   {
-     enc->offset += snprintf(str, enc->end - enc->offset, "%.15e", neg ? -value : value);
-     return TRUE;
-   }
+    enc->offset += snprintf(str, enc->end - enc->offset, "%.15e", neg ? -value : value);
+    return TRUE;
+  }
 
   if (enc->doublePrecision == 0)
   {
@@ -698,7 +729,7 @@ void encode(JSOBJ obj, JSONObjectEncoder *enc, const char *name, size_t cbName)
     }
     else
     {
-      if (!Buffer_EscapeStringUnvalidated(enc, name, name + cbName))
+      if (!Buffer_EscapeStringUnvalidated(obj, enc, name, name + cbName))
       {
         return;
       }
@@ -786,6 +817,24 @@ void encode(JSOBJ obj, JSONObjectEncoder *enc, const char *name, size_t cbName)
     break;
   }
 
+  case JT_BIGINT:
+  {
+    value = enc->getStringValue(obj, &tc, &szlen);
+    Buffer_Reserve(enc, RESERVE_STRING(szlen));
+    if (enc->errorMsg)
+    {
+      enc->endTypeContext(obj, &tc);
+      return;
+    }
+    if (!Buffer_EscapeStringUnvalidated(obj, enc, value, value + szlen))
+    {
+      enc->endTypeContext(obj, &tc);
+      enc->level --;
+      return;
+    }
+    break;
+  }
+
   case JT_INT:
   {
     Buffer_AppendIntUnchecked (enc, enc->getIntValue(obj, &tc));
@@ -854,7 +903,7 @@ void encode(JSOBJ obj, JSONObjectEncoder *enc, const char *name, size_t cbName)
       }
       else
       {
-        if (!Buffer_EscapeStringUnvalidated(enc, value, value + szlen))
+        if (!Buffer_EscapeStringUnvalidated(obj, enc, value, value + szlen))
         {
           enc->endTypeContext(obj, &tc);
           enc->level --;

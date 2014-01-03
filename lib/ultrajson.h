@@ -79,6 +79,35 @@ Dictates and limits how much stack space for buffers UltraJSON will use before r
 #define JSON_MAX_STACK_BUFFER_SIZE 131072
 #endif
 
+/*
+Escape Unicode control characters in range 0x7f - 0x9f. This is not required by
+json standard but may be a good idea if you're paranoid about broken browsers or
+plugins not being able to correctly read JS. It's safe to enable this option. */
+#ifdef JSON_ESCAPE_UNICODE_CONTROL_CHARACTERS
+#define HAS_JSON_ESCAPE_UNICODE_CONTROL_CHARACTERS 1
+#else
+#define HAS_JSON_ESCAPE_UNICODE_CONTROL_CHARACTERS 0
+#endif
+
+/* Set encodeHTMLChars to True by default. Different from standard json python
+API but helps to protect against unintentional mistakes. */
+#ifdef JSON_ENCODE_HTML_CHARS_DEFAULT_TRUE
+#define HAS_JSON_ENCODE_HTML_CHARS_DEFAULT_TRUE 1
+#else
+#define HAS_JSON_ENCODE_HTML_CHARS_DEFAULT_TRUE 0
+#endif
+
+/* By default ujson wouldn't try to decode or encode numbers bigger than long
+long as javascript can't handle such numbers anyway. Enabling this option would
+fallback to Python's implementations of encode and decode when number is
+outside of supported range of fast parsing. */
+#ifdef JSON_HANDLE_BIGINTS
+#define HAS_JSON_HANDLE_BIGINTS 1
+#else
+#define HAS_JSON_HANDLE_BIGINTS 0
+#endif
+
+
 #ifdef _WIN32
 
 typedef __int64 JSINT64;
@@ -146,15 +175,16 @@ typedef int64_t JSLONG;
 enum JSTYPES
 {
   JT_NULL,        // NULL
-  JT_TRUE,        //boolean true
-  JT_FALSE,       //boolean false
-  JT_INT,         //(JSINT32 (signed 32-bit))
-  JT_LONG,        //(JSINT64 (signed 64-bit))
-  JT_DOUBLE,    //(double)
-  JT_UTF8,        //(char 8-bit)
+  JT_TRUE,        // boolean true
+  JT_FALSE,       // boolean false
+  JT_INT,         // (JSINT32 (signed 32-bit))
+  JT_LONG,        // (JSINT64 (signed 64-bit))
+  JT_BIGINT,      // (PyObject (signed >64-bit))
+  JT_DOUBLE,      // (double)
+  JT_UTF8,        // (char 8-bit)
   JT_ARRAY,       // Array structure
-  JT_OBJECT,    // Key/Value structure
-  JT_INVALID,    // Internal, do not return nor expect
+  JT_OBJECT,      // Key/Value structure
+  JT_INVALID,     // Internal, do not return nor expect
 };
 
 typedef void * JSOBJ;
@@ -294,6 +324,7 @@ typedef struct __JSONObjectDecoder
   JSOBJ (*newArray)(void *prv);
   JSOBJ (*newInt)(void *prv, JSINT32 value);
   JSOBJ (*newLong)(void *prv, JSINT64 value);
+  JSOBJ (*newBigInt)(void *prv, char *start, char *end);
   JSOBJ (*newDouble)(void *prv, double value);
   void (*releaseObject)(void *prv, JSOBJ obj);
   JSPFN_MALLOC malloc;
