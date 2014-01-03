@@ -1,4 +1,4 @@
-﻿
+﻿# -*- coding: utf-8 -*-
 try:
     import unittest2 as unittest
 except ImportError:
@@ -10,6 +10,7 @@ try:
     import json
 except ImportError:
     import simplejson as json
+import array
 import math
 import platform
 import sys
@@ -225,11 +226,15 @@ class UltraJSONTests(TestCase):
         self.assertEquals(enc, json_unicode(input))
         self.assertEquals(dec, json.loads(enc))
 
-    # Characters outside of Basic Multilingual Plane(larger than
-    # 16 bits) are represented as \UXXXXXXXX in python but should be encoded
-    # as \uXXXX\uXXXX in json.
+    # From http://www.ietf.org/rfc/rfc4627.txt #2.5
+    # "To escape an extended character that is not in the Basic Multilingual
+    # Plane, the character is represented as a twelve-character sequence,
+    # encoding the UTF-16 surrogate pair."
+    #
+    # Testing that character outside of BMP, represented as \UXXXXXXXX in
+    # python is correctly encoded as \uXXXX\uXXXX in json.
     def testEncodeUnicodeBMP(self):
-        s = u'\U0001f42e\U0001f42e\U0001F42D\U0001F42D' # 🐮🐮🐭🐭
+        s = u'\U0001f42e\U0001F42D\U0001F435\U0001F41A'
         encoded = ujson.dumps(s)
         encoded_json = json.dumps(s)
         self.assertEqual(len(encoded), len(s) * 12 + 2) # 12 characters + quotes
@@ -247,7 +252,7 @@ class UltraJSONTests(TestCase):
         self.assertEqual(s, decoded)
 
     def testEncodeSymbols(self):
-        s = u'\u273f\u2661\u273f' # ✿♡✿
+        s = u'\u273f\u2661\u273f'
         encoded = ujson.dumps(s)
         encoded_json = json.dumps(s)
         self.assertEqual(len(encoded), len(s) * 6 + 2) # 6 characters + quotes
@@ -363,171 +368,68 @@ class UltraJSONTests(TestCase):
         dec2 = ujson.decode(str(input))
         self.assertEquals(dec1, dec2)
 
-    def test_encodeRecursionMax(self):
-        # 8 is the max recursion depth
-
-        class O2:
-            member = 0
-            pass
-
-        class O1:
-            member = 0
-            pass
-
-        input = O1()
-        input.member = O2()
-        input.member.member = input
-
-        try:
-            output = ujson.encode(input)
-            assert False, "Expected overflow exception"
-        except(OverflowError):
-            pass
-
     def test_encodeDoubleNan(self):
         input = float('nan')
-        try:
-            ujson.encode(input)
-            assert False, "Expected exception!"
-        except(OverflowError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(OverflowError, ujson.encode, input)
 
     def test_encodeDoubleInf(self):
         input = float('inf')
-        try:
-            ujson.encode(input)
-            assert False, "Expected exception!"
-        except(OverflowError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(OverflowError, ujson.encode, input)
 
     def test_encodeDoubleNegInf(self):
         input = -float('inf')
-        try:
-            ujson.encode(input)
-            assert False, "Expected exception!"
-        except(OverflowError):
-            return
-        assert False, "Wrong exception"
-
+        self.assertRaises(OverflowError, ujson.encode, input)
 
     def test_decodeJibberish(self):
         input = "fdsa sda v9sa fdsa"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeBrokenArrayStart(self):
         input = "["
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeBrokenObjectStart(self):
         input = "{"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeBrokenArrayEnd(self):
         input = "]"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeArrayDepthTooBig(self):
         input = '[' * (1024 * 1024)
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeBrokenObjectEnd(self):
         input = "}"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeObjectDepthTooBig(self):
         input = '{' * (1024 * 1024)
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeStringUnterminated(self):
         input = "\"TESTING"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
-
+        self.assertRaises(ValueError, ujson.decode, input)
     def test_decodeStringUntermEscapeSequence(self):
         input = "\"TESTING\\\""
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeStringBadEscape(self):
         input = "\"TESTING\\\""
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeTrueBroken(self):
         input = "tru"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeFalseBroken(self):
         input = "fa"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeNullBroken(self):
         input = "n"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
 
     def test_decodeBrokenDictKeyTypeLeakTest(self):
@@ -544,54 +446,24 @@ class UltraJSONTests(TestCase):
     def test_decodeBrokenDictLeakTest(self):
         input = '{{"key":"}'
         for x in xrange(1000):
-            try:
-                ujson.decode(input)
-                assert False, "Expected exception!"
-            except(ValueError):
-                continue
-
-            assert False, "Wrong exception"
+            self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeBrokenListLeakTest(self):
         input = '[[[true'
         for x in xrange(1000):
-            try:
-                ujson.decode(input)
-                assert False, "Expected exception!"
-            except(ValueError):
-                continue
-
-            assert False, "Wrong exception"
+            self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeDictWithNoKey(self):
         input = "{{{{31337}}}}"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeDictWithNoColonOrValue(self):
         input = "{{{{\"key\"}}}}"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeDictWithNoValue(self):
         input = "{{{{\"key\":}}}}"
-        try:
-            ujson.decode(input)
-            assert False, "Expected exception!"
-        except(ValueError):
-            return
-
-        assert False, "Wrong exception"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeNumericIntPos(self):
         input = "31337"
@@ -604,11 +476,7 @@ class UltraJSONTests(TestCase):
     #@unittest.skipIf(_python_ver(3), "No exception in Python 3")
     def test_encodeUnicode4BytesUTF8Fail(self):
         input = "\xfd\xbf\xbf\xbf\xbf\xbf"
-        try:
-            enc = ujson.encode(input)
-            assert False, "Expected exception"
-        except OverflowError:
-            pass
+        self.assertRaises(OverflowError, ujson.encode, input)
 
     def test_encodeNullCharacter(self):
         input = "31337 \x00 1337"
@@ -734,29 +602,13 @@ class UltraJSONTests(TestCase):
                "ujson.__version__ must be a string like '1.4.0'"
 
     def test_encodeNumericOverflow(self):
-        try:
+        if ujson.bigint_supported:
             ujson.encode(12839128391289382193812939)
-        except OverflowError:
-            pass
         else:
-            assert False, "expected OverflowError"
-
-    def test_encodeNumericOverflowNested(self):
-        for n in xrange(0, 100):
-            class Nested:
-                x = 12839128391289382193812939
-
-            nested = Nested()
-
-            try:
-                ujson.encode(nested)
-            except OverflowError:
-                pass
-            else:
-                assert False, "expected OverflowError"
+          self.assertRaises(OverflowError, ujson.encode, 12839128391289382193812939)
 
     def test_decodeNumberWith32bitSignBit(self):
-        #Test that numbers that fit within 32 bits but would have the
+        # Test that numbers that fit within 32 bits but would have the
         # sign bit set (2**31 <= x < 2**32) are decoded properly.
         boundary1 = 2**31
         boundary2 = 2**32
@@ -804,39 +656,19 @@ class UltraJSONTests(TestCase):
 
     def test_decodeArrayTrailingCommaFail(self):
         input = "[31337,]"
-        try:
-            ujson.decode(input)
-        except ValueError:
-            pass
-        else:
-            assert False, "expected ValueError"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeArrayLeadingCommaFail(self):
         input = "[,31337]"
-        try:
-            ujson.decode(input)
-        except ValueError:
-            pass
-        else:
-            assert False, "expected ValueError"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeArrayOnlyCommaFail(self):
         input = "[,]"
-        try:
-            ujson.decode(input)
-        except ValueError:
-            pass
-        else:
-            assert False, "expected ValueError"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeArrayUnmatchedBracketFail(self):
         input = "[]]"
-        try:
-            ujson.decode(input)
-        except ValueError:
-            pass
-        else:
-            assert False, "expected ValueError"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeArrayEmpty(self):
         input = "[]"
@@ -861,69 +693,82 @@ class UltraJSONTests(TestCase):
         ujson.decode(input)
 
     def test_decodeTooBigValue(self):
-        try:
-            input = "9223372036854775808"
-            ujson.decode(input)
-        except ValueError, e:
-            pass
+        if ujson.bigint_supported:
+            for i in range(30):
+                input = 9223372036854775800 + i
+                obj = ujson.decode('%s' % input)
+                self.assertEqual(input, obj)
+            for i in range(30):
+                input = 41255008296960273580 + i
+                obj = ujson.decode('%s' % input)
+                self.assertEqual(input, obj)
         else:
-            assert False, "expected ValueError"
+          try:
+              input = "9223372036854775808"
+              ujson.decode(input)
+          except ValueError, e:
+              pass
+          else:
+              assert False, "expected ValueError"
+
+    def test_decodeTooBigValueOver64Characters(self):
+      if not ujson.bigint_supported:
+        return
+      # ujson bignum support has two paths for decoding
+      # One for strings with length < 64 characters with a local buffer(fast)
+      # And one for length >= 64 with memory allocation (slower)
+      input = '1234567890' * 100 # 1000 characters
+      obj = ujson.decode(input)
+      self.assertEqual(long(input), obj)
+
+    def test_decodeTooBigValueFloat(self):
+        if ujson.bigint_supported:
+            for i in range(30):
+              input = '%s.9' % (9223372036854775800 + i)
+              obj = ujson.decode(input)
+              self.assertEqual(float(input), obj)
+        else:
+          input = "9223372036854775808.9"
+          self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeTooSmallValue(self):
-        try:
-            input = "-90223372036854775809"
-            ujson.decode(input)
-        except ValueError,e:
-            pass
+        if ujson.bigint_supported:
+            for i in range(30):
+                input = -90223372036854775809 - i
+                obj = ujson.decode('%s' % input)
+                self.assertEqual(input, obj)
+            for i in range(30):
+                input = -41255008296960273580 - i
+                obj = ujson.decode('%s' % input)
+                self.assertEqual(input, obj)
         else:
-            assert False, "expected ValueError"
+          input = "-90223372036854775809"
+          self.assertRaises(ValueError, ujson.decode, input)
 
-    def test_decodeVeryTooBigValue(self):
-        try:
-            input = "9223372036854775808"
-            ujson.decode(input)
-        except ValueError:
-            pass
+    def test_decodeTooSmallValueFloat(self):
+        if ujson.bigint_supported:
+            for i in range(30):
+              input = '-%s.9' % (9223372036854775800 + i)
+              obj = ujson.decode(input)
+              self.assertEqual(float(input), obj)
         else:
-            assert False, "expected ValueError"
-
-    def test_decodeVeryTooSmallValue(self):
-        try:
-            input = "-90223372036854775809"
-            ujson.decode(input)
-        except ValueError:
-            pass
-        else:
-            assert False, "expected ValueError"
+          input = "9223372036854775808.9"
+          self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeWithTrailingWhitespaces(self):
         input = "{}\n\t "
         ujson.decode(input)
 
     def test_decodeWithTrailingNonWhitespaces(self):
-        try:
-            input = "{}\n\t a"
-            ujson.decode(input)
-        except ValueError:
-            pass
-        else:
-            assert False, "expected ValueError"
+        input = "{}\n\t a"
+        self.assertRaises(ValueError, ujson.decode, input)
 
     def test_decodeArrayWithBigInt(self):
-        try:
-            ujson.loads('[18446098363113800555]')
-        except ValueError:
-            pass
+        if ujson.bigint_supported:
+            input = 18446098363113800555
+            self.assertEquals(ujson.loads('[%s]' % input), [input])
         else:
-            assert False, "expected ValueError"
-
-    def test_decodeArrayFaultyUnicode(self):
-        try:
-            ujson.loads('[18446098363113800555]')
-        except ValueError:
-            pass
-        else:
-            assert False, "expected ValueError"
+          self.assertRaises(ValueError, ujson.loads, '[18446098363113800555]')
 
     def test_decodeFloatingPointAdditionalTests(self):
         self.assertEquals(-1.1234567893, ujson.loads("-1.1234567893"))
@@ -964,80 +809,79 @@ class UltraJSONTests(TestCase):
         for v in dec:
             self.assertTrue(v in s)
 
-    def test_ReadBadObjectSyntax(self):
-        try:
-            ujson.loads('{"age", 44}')
-        except ValueError:
-            pass
-        else:
-            assert False, "expected ValueError"
+    def test_readBadObjectSyntax(self):
+        self.assertRaises(ValueError, ujson.loads, '{"age", 44}')
 
-    def test_ReadTrue(self):
+    def test_readTrue(self):
         self.assertEqual(True, ujson.loads("true"))
 
-    def test_ReadFalse(self):
+    def test_readFalse(self):
         self.assertEqual(False, ujson.loads("false"))
 
-    def test_ReadNull(self):
+    def test_readNull(self):
         self.assertEqual(None, ujson.loads("null"))
 
-    def test_WriteTrue(self):
+    def test_writeTrue(self):
         self.assertEqual("true", ujson.dumps(True))
 
-    def test_WriteFalse(self):
+    def test_writeFalse(self):
         self.assertEqual("false", ujson.dumps(False))
 
-    def test_WriteNull(self):
+    def test_writeNull(self):
         self.assertEqual("null", ujson.dumps(None))
 
-    def test_ReadArrayOfSymbols(self):
+    def test_readArrayOfSymbols(self):
         self.assertEqual([True, False, None], ujson.loads(" [ true, false,null] "))
 
-    def test_WriteArrayOfSymbolsFromList(self):
+    def test_writeArrayOfSymbolsFromList(self):
         self.assertEqual("[true,false,null]", ujson.dumps([True, False, None]))
 
-    def test_WriteArrayOfSymbolsFromTuple(self):
+    def test_writeArrayOfSymbolsFromTuple(self):
         self.assertEqual("[true,false,null]", ujson.dumps((True, False, None)))
 
-"""
-def test_decodeNumericIntFrcOverflow(self):
-input = "X.Y"
-raise NotImplementedError("Implement this test!")
+    # Ensure that ujson can digest both unicode objects and utf-8 strings
+    def test_encodeUTF8EncodedString(self):
+        unicode_str = u"مرحبا العالم Salam dünya Прывітанне свет Здравей, свят"
+        utf_str = unicode_str.encode('utf-8')
+
+        encoded_from_unicode = ujson.encode(unicode_str)
+        encoded_from_utf_str = ujson.encode(utf_str)
+
+        self.assertEqual(encoded_from_unicode, encoded_from_utf_str)
+
+        encoded_from_unicode = ujson.encode(unicode_str, ensure_ascii=False)
+        encoded_from_utf_str = ujson.encode(utf_str, ensure_ascii=False)
+
+        self.assertEqual(encoded_from_unicode, encoded_from_utf_str)
+
+    def test_functionReferenceEncoding(self):
+        def func(): pass
+        self.assertRaises(TypeError, ujson.dumps, {'func': func})
+
+    def test_moduleEncoding(self):
+        self.assertRaises(TypeError, ujson.dumps, {'module': array})
+
+    def test_classEncoding(self):
+        class Test():
+          pass
+        self.assertRaises(TypeError, ujson.dumps, {'class': Test})
+
+    def test_classInstanceEncoding(self):
+        class Test():
+          pass
+        self.assertRaises(TypeError, ujson.dumps, {'class': Test()})
+
+    def test_callableReferenceEncoding(self):
+        class CallableClass:
+          def __call__(self):
+            return True
+        callable_instance = CallableClass()
+        self.assertRaises(TypeError, ujson.dumps, {'inst': callable_instance})
+
+    def test_arrayInstanceEncoding(self):
+        arr = array.array('i', [1,2,3])
+        self.assertRaises(TypeError, ujson.dumps, {'array_inst': arr})
 
 
-def test_decodeStringUnicodeEscape(self):
-input = "\u3131"
-raise NotImplementedError("Implement this test!")
-
-def test_decodeStringUnicodeBrokenEscape(self):
-input = "\u3131"
-raise NotImplementedError("Implement this test!")
-
-def test_decodeStringUnicodeInvalidEscape(self):
-input = "\u3131"
-raise NotImplementedError("Implement this test!")
-
-def test_decodeStringUTF8(self):
-input = "someutfcharacters"
-raise NotImplementedError("Implement this test!")
-
-"""
 if __name__ == "__main__":
     unittest.main()
-
-
-# Use this to look for memory leaks
-"""
-if __name__ == '__main__':
-    from guppy import hpy
-    hp = hpy()
-    hp.setrelheap()
-    while True:
-        try:
-            unittest.main()
-        except SystemExit:
-            pass
-        heap = hp.heapu()
-        print heap
-"""
-
